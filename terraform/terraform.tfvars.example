@@ -1,0 +1,15 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real values.
+
+hcloud_token   = "your-hetzner-api-token-here"
+ssh_public_key = "ssh-ed25519 AAAA... your-key-comment"
+
+# Your current public IP — find it at https://ipinfo.io/ip
+# Format must include CIDR: ["x.x.x.x/32"]
+admin_ips = ["0.0.0.0/32"]
+
+# Optional overrides (defaults are fine for this project)
+# project_name = "jewelry-platform"
+# location     = "fsn1"
+# server_type  = "cx22"
+# worker_count = 2
