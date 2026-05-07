@@ -13,13 +13,13 @@ variable "project_name" {
 variable "location" {
   description = "Hetzner datacenter location"
   type        = string
-  default     = "fsn1" # Falkenstein, Germany — closest to eu-central-1
+  default     = "nbg1" # Nuremberg, Germany — same eu-central zone as fsn1
 }
 
 variable "server_type" {
   description = "Hetzner server type for all nodes"
   type        = string
-  default     = "cx22" # 2 vCPU, 4GB RAM, 40GB SSD — ~€3.79/mo
+  default     = "cx23" # 2 vCPU, 4GB RAM, 40GB SSD — ~€4.83/mo
 }
 
 variable "worker_count" {
