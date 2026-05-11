@@ -25,7 +25,7 @@ jobs:
 
       - name: Lint playbooks
         env:
-          ANSIBLE_COLLECTIONS_PATHS: $HOME/.ansible/collections
+          ANSIBLE_COLLECTIONS_PATH: $HOME/.ansible/collections
         run: ansible-lint ansible/playbooks/
 
   validate-k8s:
