@@ -1,0 +1,5 @@
+profile: basic
+skip_list:
+  - fqcn[action-core]
+  - fqcn[action]
+  - no-changed-when

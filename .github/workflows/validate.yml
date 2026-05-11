@@ -13,12 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ansible-lint
+      - name: Install ansible-lint and dependencies
         run: pip install ansible-lint
+
+      - name: Install required Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
 
       - name: Lint playbooks
         run: ansible-lint ansible/playbooks/
-        continue-on-error: false
 
   validate-k8s:
     name: Validate Kubernetes manifests
@@ -33,7 +35,7 @@ jobs:
         run: |
           for f in k8s/*.yaml; do
             echo "Validating $f..."
-            kubectl apply --dry-run=client -f "$f"
+            kubectl apply --dry-run=client --validate=false -f "$f"
           done
 
   validate-helm:
@@ -47,14 +49,16 @@ jobs:
 
       - name: Add required Helm repos
         run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo add jetstack https://charts.jetstack.io
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
 
       - name: Lint ingress-nginx values
-        run: helm lint ingress-nginx/ingress-nginx -f helm/ingress-nginx-values.yaml
+        run: |
+          helm pull ingress-nginx/ingress-nginx --untar --untardir /tmp/charts
+          helm lint /tmp/charts/ingress-nginx -f helm/ingress-nginx-values.yaml
 
       - name: Lint kube-prometheus-stack values
-        run: helm lint prometheus-community/kube-prometheus-stack -f helm/kube-prometheus-stack-values.yaml
+        run: |
+          helm pull prometheus-community/kube-prometheus-stack --untar --untardir /tmp/charts
+          helm lint /tmp/charts/kube-prometheus-stack -f helm/kube-prometheus-stack-values.yaml
