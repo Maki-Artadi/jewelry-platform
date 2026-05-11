@@ -1,0 +1,76 @@
+## bitnami/wordpress — WooCommerce deployment
+## Store: Curated Jewelry by Leon (madebyleon.shop)
+
+wordpressUsername: makiartadi.at.work
+wordpressEmail: makiartadi.at.work@gmail.com
+wordpressFirstName: Maki
+wordpressLastName: Admin
+wordpressBlogName: "Curated Jewelry by Leon"
+
+## Password is intentionally omitted here.
+## Pass it at deploy time:
+##   --set wordpressPassword=$WP_PASS --set mariadb.auth.rootPassword=$DB_ROOT_PASS --set mariadb.auth.password=$DB_PASS
+
+## WooCommerce
+wordpressPlugins: woocommerce
+
+## Persistence
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 5Gi
+
+## MariaDB (bundled)
+mariadb:
+  enabled: true
+  auth:
+    database: wordpress
+    username: wordpress
+    ## passwords passed at runtime, not stored here
+
+  primary:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 5Gi
+
+## Ingress
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: madebyleon.shop
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+  tls: true
+  ## cert-manager will provision the secret automatically
+  extraTls:
+    - hosts:
+        - madebyleon.shop
+      secretName: madebyleon-shop-tls
+
+## Service
+service:
+  type: ClusterIP
+
+## Resources (sized for CX23 nodes)
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+## Health check tuning (WP can be slow on cold start)
+livenessProbe:
+  initialDelaySeconds: 120
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6

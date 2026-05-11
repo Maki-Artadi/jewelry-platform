@@ -1,0 +1,82 @@
+## kube-prometheus-stack — Cluster monitoring
+## Grafana at grafana.madebyleon.shop
+## Sized conservatively for CX23 nodes (4 GB RAM, 2 vCPU)
+
+## ── Grafana ───────────────────────────────────────────────────────────────────
+grafana:
+  ## adminPassword passed at runtime: --set grafana.adminPassword=$GRAFANA_PASS
+  adminUser: admin
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.madebyleon.shop
+    tls:
+      - secretName: grafana-madebyleon-shop-tls
+        hosts:
+          - grafana.madebyleon.shop
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  ## Default dashboards
+  defaultDashboardsTimezone: Europe/Berlin
+
+## ── Prometheus ────────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 7d
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+## ── Alertmanager ──────────────────────────────────────────────────────────────
+## Disabled to save resources — enable later when alert routing is needed
+alertmanager:
+  enabled: false
+
+## ── Node exporter ─────────────────────────────────────────────────────────────
+nodeExporter:
+  enabled: true
+
+## ── kube-state-metrics ────────────────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+
+## ── Controller manager / scheduler / etcd scraping ───────────────────────────
+## Disabled — not exposed on Hetzner managed networking
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false

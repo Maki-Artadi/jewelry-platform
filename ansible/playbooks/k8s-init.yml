@@ -22,7 +22,7 @@
       command: >
         kubeadm init
         --apiserver-advertise-address={{ hostvars[inventory_hostname]['private_ip'] }}
-        --apiserver-cert-extra-sans={{ floating_ip }}
+        --apiserver-cert-extra-sans={{ floating_ip }},{{ hostvars[inventory_hostname]['ansible_host'] }}
         --pod-network-cidr={{ pod_cidr }}
         --node-name={{ inventory_hostname }}
       when: not kubeconfig.stat.exists
@@ -41,8 +41,22 @@
         remote_src: yes
         mode: "0600"
 
+    - name: Download Flannel manifest
+      get_url:
+        url: https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+        dest: /tmp/kube-flannel.yml
+        force: yes
+      when: not kubeconfig.stat.exists
+
+    - name: Configure Flannel to use private network interface
+      replace:
+        path: /tmp/kube-flannel.yml
+        regexp: '- --kube-subnet-mgr$'
+        replace: "- --kube-subnet-mgr\n        - --iface=enp7s0"
+      when: not kubeconfig.stat.exists
+
     - name: Install Flannel CNI
-      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+      command: kubectl apply -f /tmp/kube-flannel.yml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       when: not kubeconfig.stat.exists
@@ -64,6 +78,14 @@
         src: /etc/kubernetes/admin.conf
         dest: /tmp/kubeconfig
         flat: yes
+      become: false
+
+    - name: Update kubeconfig server to use public IP
+      replace:
+        path: /tmp/kubeconfig
+        regexp: "https://{{ hostvars[inventory_hostname]['private_ip'] }}:6443"
+        replace: "https://{{ hostvars[inventory_hostname]['ansible_host'] }}:6443"
+      delegate_to: localhost
       become: false
 
 

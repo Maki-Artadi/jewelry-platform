@@ -1,0 +1,11 @@
+controller:
+  kind: DaemonSet
+  hostNetwork: true
+  hostPort:
+    enabled: true
+  service:
+    type: ClusterIP
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule

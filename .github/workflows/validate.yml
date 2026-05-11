@@ -1,0 +1,60 @@
+name: Validate
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-ansible:
+    name: Lint Ansible playbooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install ansible-lint
+
+      - name: Lint playbooks
+        run: ansible-lint ansible/playbooks/
+        continue-on-error: false
+
+  validate-k8s:
+    name: Validate Kubernetes manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Dry-run apply all manifests
+        run: |
+          for f in k8s/*.yaml; do
+            echo "Validating $f..."
+            kubectl apply --dry-run=client -f "$f"
+          done
+
+  validate-helm:
+    name: Validate Helm values
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Add required Helm repos
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+      - name: Lint ingress-nginx values
+        run: helm lint ingress-nginx/ingress-nginx -f helm/ingress-nginx-values.yaml
+
+      - name: Lint kube-prometheus-stack values
+        run: helm lint prometheus-community/kube-prometheus-stack -f helm/kube-prometheus-stack-values.yaml

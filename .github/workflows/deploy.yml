@@ -1,0 +1,50 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate before deploy
+    uses: ./.github/workflows/validate.yml
+
+  deploy:
+    name: Deploy to Hetzner cluster
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Verify cluster connectivity
+        run: kubectl get nodes
+
+      - name: Apply Plausible manifests
+        run: kubectl apply -f k8s/plausible.yaml
+
+      - name: Apply Listmonk manifests
+        run: kubectl apply -f k8s/listmonk.yaml
+
+      - name: Apply n8n manifests
+        run: kubectl apply -f k8s/n8n.yaml
+
+      - name: Apply Uptime Kuma manifests
+        run: kubectl apply -f k8s/uptime-kuma.yaml
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/plausible -n plausible --timeout=120s
+          kubectl rollout status deployment/listmonk -n listmonk --timeout=120s
+          kubectl rollout status deployment/n8n -n n8n --timeout=120s
+          kubectl rollout status deployment/uptime-kuma -n uptime-kuma --timeout=120s

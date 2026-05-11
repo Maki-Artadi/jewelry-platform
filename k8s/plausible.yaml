@@ -1,0 +1,257 @@
+---
+# Plausible Analytics — Curated Jewelry by Leon
+# https://analytics.madebyleon.shop
+#
+# Deploy order:
+#   1. Create the secret first (see README below)
+#   2. kubectl apply -f k8s/plausible.yaml
+#
+# ── CREATE SECRET ──────────────────────────────────────────────────────────────
+# export PG_PASS='your-postgres-password'
+#
+# kubectl create namespace plausible
+#
+# kubectl create secret generic plausible-secrets \
+#   --namespace plausible \
+#   --from-literal=secret-key-base=$(openssl rand -hex 64) \
+#   --from-literal=database-url="postgresql://plausible:${PG_PASS}@plausible-postgres:5432/plausible" \
+#   --from-literal=postgres-password="${PG_PASS}"
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plausible
+
+---
+# ── ClickHouse ─────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: plausible-clickhouse
+  namespace: plausible
+spec:
+  serviceName: plausible-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plausible-clickhouse
+  template:
+    metadata:
+      labels:
+        app: plausible-clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:23.8-alpine
+          ports:
+            - containerPort: 8123
+              name: http
+            - containerPort: 9000
+              name: native
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 1Gi
+              cpu: 1000m
+          volumeMounts:
+            - name: clickhouse-data
+              mountPath: /var/lib/clickhouse
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 20
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: clickhouse-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: plausible-clickhouse
+  namespace: plausible
+spec:
+  selector:
+    app: plausible-clickhouse
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8123
+    - name: native
+      port: 9000
+
+---
+# ── PostgreSQL ─────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: plausible-postgres
+  namespace: plausible
+spec:
+  serviceName: plausible-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plausible-postgres
+  template:
+    metadata:
+      labels:
+        app: plausible-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              value: plausible
+            - name: POSTGRES_DB
+              value: plausible
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: plausible-secrets
+                  key: postgres-password
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "plausible"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: plausible-postgres
+  namespace: plausible
+spec:
+  selector:
+    app: plausible-postgres
+  clusterIP: None
+  ports:
+    - port: 5432
+
+---
+# ── Plausible CE ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plausible
+  namespace: plausible
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plausible
+  template:
+    metadata:
+      labels:
+        app: plausible
+    spec:
+      containers:
+        - name: plausible
+          image: ghcr.io/plausible/community-edition:v2.1.4
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              sleep 15 &&
+              /entrypoint.sh db createdb &&
+              /entrypoint.sh db migrate &&
+              /entrypoint.sh run
+          ports:
+            - containerPort: 8000
+          env:
+            - name: BASE_URL
+              value: "https://analytics.madebyleon.shop"
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: plausible-secrets
+                  key: secret-key-base
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: plausible-secrets
+                  key: database-url
+            - name: CLICKHOUSE_DATABASE_URL
+              value: "http://plausible-clickhouse:8123/plausible_events_db"
+            - name: DISABLE_REGISTRATION
+              value: "true"
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: plausible
+  namespace: plausible
+spec:
+  selector:
+    app: plausible
+  ports:
+    - port: 8000
+
+---
+# ── Ingress ────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plausible
+  namespace: plausible
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: analytics.madebyleon.shop
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: plausible
+                port:
+                  number: 8000
+  tls:
+    - secretName: analytics-madebyleon-shop-tls
+      hosts:
+        - analytics.madebyleon.shop

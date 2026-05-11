@@ -73,10 +73,8 @@
         path: /etc/containerd
         state: directory
 
-    - name: Generate default containerd config
+    - name: Generate default containerd config (always regenerate for clean state)
       shell: containerd config default > /etc/containerd/config.toml
-      args:
-        creates: /etc/containerd/config.toml
 
     - name: Enable CRI plugin (disabled by default in Docker repo build)
       replace:
@@ -128,6 +126,27 @@
         - kubeadm
         - kubectl
 
+    # ── kubelet node IP ───────────────────────────────────────────────────────
+    - name: Set kubelet node-ip to private network interface
+      copy:
+        dest: /etc/default/kubelet
+        content: 'KUBELET_EXTRA_ARGS="--node-ip={{ private_ip }}"'
+
+    # ── kubelet startup delay (prevents etcd/apiserver race on boot) ──────────
+    - name: Create kubelet systemd override directory
+      file:
+        path: /etc/systemd/system/kubelet.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Add kubelet startup delay
+      copy:
+        dest: /etc/systemd/system/kubelet.service.d/20-startup-delay.conf
+        content: |
+          [Service]
+          ExecStartPre=/bin/sleep 15
+      notify: Reload systemd
+
     - name: Enable and start kubelet
       systemd:
         name: kubelet
@@ -139,3 +158,7 @@
       systemd:
         name: containerd
         state: restarted
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes

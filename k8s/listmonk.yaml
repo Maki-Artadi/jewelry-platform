@@ -1,0 +1,207 @@
+---
+# Listmonk — Newsletter & mailing list manager
+# https://newsletter.madebyleon.shop
+#
+# ── CREATE SECRET ──────────────────────────────────────────────────────────────
+# export LISTMONK_PG_PASS='your-postgres-password'
+# export LISTMONK_ADMIN_PASS='your-admin-password'
+#
+# kubectl create namespace listmonk
+#
+# kubectl create secret generic listmonk-secrets \
+#   --namespace listmonk \
+#   --from-literal=postgres-password="${LISTMONK_PG_PASS}" \
+#   --from-literal=admin-password="${LISTMONK_ADMIN_PASS}"
+# ──────────────────────────────────────────────────────────────────────────────
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: listmonk
+
+---
+# ── PostgreSQL ─────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: listmonk-postgres
+  namespace: listmonk
+spec:
+  serviceName: listmonk-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: listmonk-postgres
+  template:
+    metadata:
+      labels:
+        app: listmonk-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              value: listmonk
+            - name: POSTGRES_DB
+              value: listmonk
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: listmonk-secrets
+                  key: postgres-password
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "listmonk"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: listmonk-postgres
+  namespace: listmonk
+spec:
+  selector:
+    app: listmonk-postgres
+  clusterIP: None
+  ports:
+    - port: 5432
+
+---
+# ── Listmonk ───────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: listmonk
+  namespace: listmonk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: listmonk
+  template:
+    metadata:
+      labels:
+        app: listmonk
+    spec:
+      initContainers:
+        - name: install
+          image: listmonk/listmonk:v4.1.0
+          command: ["./listmonk", "--install", "--yes"]
+          env:
+            - name: LISTMONK_db__host
+              value: listmonk-postgres
+            - name: LISTMONK_db__port
+              value: "5432"
+            - name: LISTMONK_db__user
+              value: listmonk
+            - name: LISTMONK_db__database
+              value: listmonk
+            - name: LISTMONK_db__ssl_mode
+              value: disable
+            - name: LISTMONK_db__password
+              valueFrom:
+                secretKeyRef:
+                  name: listmonk-secrets
+                  key: postgres-password
+      containers:
+        - name: listmonk
+          image: listmonk/listmonk:v4.1.0
+          command: ["./listmonk", "--config", ""]
+          ports:
+            - containerPort: 9000
+          env:
+            - name: LISTMONK_db__host
+              value: listmonk-postgres
+            - name: LISTMONK_db__port
+              value: "5432"
+            - name: LISTMONK_db__user
+              value: listmonk
+            - name: LISTMONK_db__database
+              value: listmonk
+            - name: LISTMONK_db__ssl_mode
+              value: disable
+            - name: LISTMONK_db__password
+              valueFrom:
+                secretKeyRef:
+                  name: listmonk-secrets
+                  key: postgres-password
+            - name: LISTMONK_app__address
+              value: "0.0.0.0:9000"
+            - name: LISTMONK_app__admin_username
+              value: admin
+            - name: LISTMONK_app__admin_password
+              valueFrom:
+                secretKeyRef:
+                  name: listmonk-secrets
+                  key: admin-password
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: listmonk
+  namespace: listmonk
+spec:
+  selector:
+    app: listmonk
+  ports:
+    - port: 9000
+
+---
+# ── Ingress ────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: listmonk
+  namespace: listmonk
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: newsletter.madebyleon.shop
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: listmonk
+                port:
+                  number: 9000
+  tls:
+    - secretName: newsletter-madebyleon-shop-tls
+      hosts:
+        - newsletter.madebyleon.shop

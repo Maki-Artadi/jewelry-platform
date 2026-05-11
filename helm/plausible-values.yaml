@@ -1,0 +1,63 @@
+## 8gears/plausible-community-edition
+## Analytics for madebyleon.shop
+## https://analytics.madebyleon.shop
+
+baseURL: "https://analytics.madebyleon.shop"
+
+## Admin user
+adminUser:
+  email: "makiartadi.at.work@gmail.com"
+  name: "admin"
+  ## password passed at runtime: --set adminUser.password=$PLAUSIBLE_PASS
+
+## Secret key — pass at runtime: --set secretKeyBase=$(openssl rand -hex 64)
+
+## PostgreSQL (bundled)
+postgresql:
+  enabled: true
+  auth:
+    username: plausible
+    database: plausible
+    ## password passed at runtime: --set postgresql.auth.password=$PG_PASS
+  primary:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 2Gi
+
+## ClickHouse (bundled — handles event storage)
+clickhouse:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 10Gi
+  ## ClickHouse is memory-hungry — cap it for CX23 nodes (4 GB RAM each)
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+## Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+  hosts:
+    - host: analytics.madebyleon.shop
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: analytics-madebyleon-shop-tls
+      hosts:
+        - analytics.madebyleon.shop
+
+## Service
+service:
+  type: ClusterIP

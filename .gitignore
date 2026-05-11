@@ -1,20 +1,31 @@
-# Terraform
+# Terraform state and secrets
 terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfvars
 terraform/.terraform.lock.hcl
-terraform/terraform.tfvars
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
-terraform/*.tfplan
 
-# Ansible
-ansible/inventory.ini
+# Ansible secrets and temp files
+ansible/group_vars/all/vault.yml
 ansible/*.retry
+/tmp/k8s-join-command.sh
+/tmp/kubeconfig
 
-# SSH keys
-*.pem
-*.key
-id_rsa
-id_ed25519
+# Kubernetes secrets (never commit real secrets)
+k8s/*-secret.yaml
+k8s/secrets/
 
-# OS
+# Helm secrets
+helm/*-secrets.yaml
+
+# Local kubeconfig
+*.kubeconfig
+kubeconfig
+
+# macOS
 .DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
