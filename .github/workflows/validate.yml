@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ansible-lint and dependencies
+      - name: Install ansible-lint
         run: pip install ansible-lint
 
       - name: Install required Ansible collections
@@ -28,14 +28,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+      - name: Install kubeconform
+        run: |
+          curl -sSLo /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar -xf /tmp/kubeconform.tar.gz -C /usr/local/bin/
+          chmod +x /usr/local/bin/kubeconform
 
-      - name: Dry-run apply all manifests
+      - name: Validate manifests
         run: |
           for f in k8s/*.yaml; do
             echo "Validating $f..."
-            kubectl apply --dry-run=client --validate=false -f "$f"
+            kubeconform -strict -ignore-missing-schemas "$f"
           done
 
   validate-helm:

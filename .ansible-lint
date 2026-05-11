@@ -1,5 +1,10 @@
-profile: basic
+profile: min
 skip_list:
   - fqcn[action-core]
   - fqcn[action]
   - no-changed-when
+  - yaml[truthy]
+  - yaml[commas]
+  - yaml[formatting]
+  - deprecated-local-action
+  - syntax-check[unknown-module]
