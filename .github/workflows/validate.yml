@@ -17,9 +17,15 @@ jobs:
         run: pip install ansible-lint
 
       - name: Install required Ansible collections
-        run: ansible-galaxy collection install -r ansible/requirements.yml
+        run: |
+          mkdir -p $HOME/.ansible/collections
+          ansible-galaxy collection install \
+            -r ansible/requirements.yml \
+            -p $HOME/.ansible/collections
 
       - name: Lint playbooks
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: $HOME/.ansible/collections
         run: ansible-lint ansible/playbooks/
 
   validate-k8s:
